@@ -15,10 +15,10 @@
 #import "PushwooshInboxUI.h"
 #import "PWGDPRManager.h"
 #import "PWInAppManager.h"
+#import "PWBackward.h"
 
 #import "AppDelegate.h"
 
-#import <CoreLocation/CoreLocation.h>
 #import <UserNotifications/UserNotifications.h>
 
 #import <objc/runtime.h>
@@ -42,7 +42,6 @@
 }
 
 @end
-
 
 @interface PushNotification()
 
@@ -70,6 +69,8 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 	}
 }
 
+static PushNotification *pw_PushNotificationPlugin;
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wincomplete-implementation"
 
@@ -77,31 +78,36 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 
 #pragma clang diagnostic pop
 
+- (void)pluginInitialize {
+    [super pluginInitialize];
+    pw_PushNotificationPlugin = self;
+}
+
 - (NSMutableDictionary *)callbackIds {
-	if (_callbackIds == nil) {
-		_callbackIds = [[NSMutableDictionary alloc] init];
-	}
-	return _callbackIds;
+    if (_callbackIds == nil) {
+        _callbackIds = [[NSMutableDictionary alloc] init];
+    }
+    return _callbackIds;
 }
 
 - (PushNotificationManager *)pushManager {
-	if (_pushManager == nil) {
-		_pushManager = [PushNotificationManager pushManager];
-		_pushManager.delegate = self;
-	}
-	return _pushManager;
+    if (_pushManager == nil) {
+        _pushManager = [PushNotificationManager pushManager];
+        _pushManager.delegate = self;
+    }
+    return _pushManager;
 }
 
 - (void)getPushToken:(CDVInvokedUrlCommand *)command {
-	NSString *token = [[PushNotificationManager pushManager] getPushToken];
-	CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:token];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    NSString *token = [[PushNotificationManager pushManager] getPushToken];
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:token];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)getPushwooshHWID:(CDVInvokedUrlCommand *)command {
-	NSString *token = [[PushNotificationManager pushManager] getHWID];
-	CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:token];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    NSString *token = [[PushNotificationManager pushManager] getHWID];
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:token];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)onDeviceReady:(CDVInvokedUrlCommand *)command {
@@ -232,30 +238,6 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 	}];
 }
 
-- (void)sendLocation:(CDVInvokedUrlCommand *)command {
-	NSNumber *lat = command.arguments[0][@"lat"];
-	NSNumber *lon = command.arguments[0][@"lon"];
-	CLLocation *location = [[CLLocation alloc] initWithLatitude:[lat doubleValue] longitude:[lon doubleValue]];
-	[[PushNotificationManager pushManager] sendLocation:location];
-
-	CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:nil];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-}
-
-- (void)startLocationTracking:(CDVInvokedUrlCommand *)command {
-	[[PushNotificationManager pushManager] startLocationTracking];
-
-	CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:nil];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-}
-
-- (void)stopLocationTracking:(CDVInvokedUrlCommand *)command {
-	[[PushNotificationManager pushManager] stopLocationTracking];
-
-	CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:nil];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
-}
-
 - (void)createLocalNotification:(CDVInvokedUrlCommand *)command {
     NSDictionary *params = command.arguments[0];
     NSString *body = params[@"msg"];
@@ -348,10 +330,8 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
     
     if (onStart) {
         //keep the start push
-        AppDelegate *delegate = [[UIApplication sharedApplication] delegate];
-        PushNotification *pushHandler = [delegate.viewController getCommandInstance:@"PushNotification"];
-        pushHandler.startPushData = notification;
-        pushHandler.startPushCleared = NO;
+        self.startPushData = notification;
+        self.startPushCleared = NO;
     }
     
     return notification;
@@ -389,10 +369,10 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 }
 
 - (void)getApplicationIconBadgeNumber:(CDVInvokedUrlCommand *)command {
-	NSInteger badge = [UIApplication sharedApplication].applicationIconBadgeNumber;
-
-	CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:badge];
-	[self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+    NSInteger badge = [UIApplication sharedApplication].applicationIconBadgeNumber;
+    
+    CDVPluginResult *pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsInt:(int)badge];
+    [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
 
 - (void)addToApplicationIconBadgeNumber:(CDVInvokedUrlCommand *)command {
@@ -425,14 +405,14 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 }
 
 - (void)setUserId:(CDVInvokedUrlCommand *)command {
-	NSString *userId = command.arguments[0];
-	[self.pushManager setUserId:userId];
+    NSString *userId = command.arguments[0];
+    [[PWInAppManager sharedManager] setUserId:userId];
 }
 
 - (void) postEvent:(CDVInvokedUrlCommand *)command {
-	NSString *event = command.arguments[0];
-	NSDictionary *attributes = command.arguments[1];
-	[self.pushManager postEvent:event withAttributes:attributes];
+    NSString *event = command.arguments[0];
+    NSDictionary *attributes = command.arguments[1];
+    [[PWInAppManager sharedManager] postEvent:event withAttributes:attributes];
 }
 
 - (void)addJavaScriptInterface:(CDVInvokedUrlCommand *)command {
@@ -506,7 +486,7 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 - (UIImage *)imageFromInboxStyleDict:(NSDictionary *)dict forKey:(NSString *)key {
     NSObject *object = dict[key];
     if (object != nil && [object isKindOfClass:[NSString class]]) {
-        return [UIImage imageWithContentsOfFile:[((CDVViewController *)self.viewController).commandDelegate pathForResource:(NSString *)object]];
+        return [UIImage imageWithContentsOfFile:[self.commandDelegate pathForResource:(NSString *)object]];
     }
     return nil;
 }
@@ -514,7 +494,7 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 - (UIColor *)colorFromInboxStyleDict:(NSDictionary *)dict forKey:(NSString *)key {
     NSObject *object = dict[key];
     if (object != nil && [object isKindOfClass:[NSString class]]) {
-        return [((CDVViewController *)self.viewController) colorFromColorString:(NSString *)object];
+        return [PWBackward colorFromColorString:(NSString *)object cordovaViewController:((CDVViewController *)self.viewController)];
     }
     return nil;
 }
@@ -565,6 +545,10 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
     styleValue(style.listEmptyImage, @"listEmptyImage", image);
     styleValue(style.unreadImage, @"unreadImage", image);
     
+    styleValue(style.barTextColor, @"barTextColor", color);
+    styleValue(style.barAccentColor, @"barAccentColor", color);
+    styleValue(style.barBackgroundColor, @"barBackgroundColor", color);
+    styleValue(style.barTitle, @"barTitle", string);
 #undef styleValue
     
     return style;
@@ -584,8 +568,7 @@ void pushwoosh_swizzle(Class class, SEL fromChange, SEL toChange, IMP impl, cons
 }
 
 BOOL pwplugin_didRegisterUserNotificationSettings(id self, SEL _cmd, id application, id notificationSettings) {
-	AppDelegate *delegate = [[UIApplication sharedApplication] delegate];
-	PushNotification *pushHandler = [delegate.viewController getCommandInstance:@"PushNotification"];
+	PushNotification *pushHandler = pw_PushNotificationPlugin;
 	
 	UIUserNotificationSettings *settings = notificationSettings;
 	
@@ -646,12 +629,6 @@ BOOL pwplugin_didRegisterUserNotificationSettings(id self, SEL _cmd, id applicat
 
 - (BOOL)pushwooshUseRuntimeMagic {
 	return YES;
-}
-
-- (NSObject<PushNotificationDelegate> *)getPushwooshDelegate {
-	AppDelegate *delegate = [[UIApplication sharedApplication] delegate];
-	PushNotification *pushHandler = [delegate.viewController getCommandInstance:@"PushNotification"];
-	return pushHandler;
 }
 
 @end
